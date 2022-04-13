@@ -109,8 +109,8 @@ class State(Enum):
     FINISH = auto()
 
 def calc_theta_error(array1, array2):
-    inner = np.inner(a, b)
-    norms = LA.norm(a) * LA.norm(b)
+    inner = np.inner(array1, array2)
+    norms = np.linalg.norm(array1) * np.linalg.norm(array2)
 
     cos = inner / norms
     return np.arccos(np.clip(cos, -1.0, 1.0))
@@ -214,6 +214,7 @@ def main():
 
                 pass
             elif current_state == State.SPIN_CYCLE:
+                
                 pass
             elif current_state == State.DRIVE_TO_BALL:
                 pass
@@ -233,4 +234,4 @@ def main():
             pass
 
 
-main()
+# main()
