@@ -10,6 +10,7 @@ sens_q = queue.Queue(1)
 motor_l = Motor(3, 2)
 motor_r = Motor(10, 9)
 
+
 # read from the arduino, Send the four sensor values along to the the main thread
 def arduino_read():
     ser = serial.Serial("/dev/ttyUSB0", baudrate=115200)
@@ -79,7 +80,26 @@ def teensy_read():
             prev_r = right
             prev_l = left
             # send pose to queue to be processed
-            odom_q.put([x, y, theta])
+            odom_q.put([x, y, theta, d_center / dt, phi / dt])
+
+
+from enum import Enum, auto
+
+
+class State(Enum):
+    INIT = auto()
+    IR_START = auto()
+    DRIVE_TO_CENTER = auto()
+    SPIN_CYCLE = auto()
+    DRIVE_TO_BALL = auto()
+    BACK_UP = auto()
+    IR_FINISH = auto()
+    DRIVE_HOME = auto()
+    FINISH = auto()
+
+
+SENSOR_START_THRESH = 200
+SENSOR_FINISH_THRESH = 100
 
 
 def main():
@@ -89,16 +109,79 @@ def main():
     ).start()
     threading.Thread(target=arduino_read).start()
 
+    current_state = State.INIT
+
     # run the state machine
     while True:
+        # state transitions
         try:
-            print(odom_q.get_nowait())
+            if current_state == State.INIT:
+                current_state = State.IR_START
+
+            elif current_state == State.IR_START:
+                 # check if sensor is seeing the start command
+                if sens_q.get_nowait()[0] > SENSOR_START_THRESH:  # TODO add actual sensor index value
+                    current_state = State.DRIVE_TO_CENTER
+
+            elif current_state == State.DRIVE_TO_CENTER:
+                # check to see if we made it to the center
+                if drive_center_check(odom_q.get_nowait()):  # TODO how are we checking if we made it to the center
+                    current_state = State.SPIN_CYCLE
+
+            elif current_state == State.SPIN_CYCLE:
+                # check if ball is aligned enough
+                if ball_in_center():
+                    current_state = State.DRIVE_TO_BALL
+
+            elif current_state == State.DRIVE_TO_BALL:
+                # check to see if we have the ball
+                if have_ball():
+                    current_state = State.BACK_UP
+
+            elif current_state == State.BACK_UP:
+                if drive_center_check(odom_q.get_nowait()):  # TODO how are we checking if we made it to the center
+                    current_state = State.IR_FINISH
+
+            elif current_state == State.IR_FINISH:
+                # Start corner as been identified
+                if sens_q.get_nowait()[0] > SENSOR_FINISH_THRESH:  # TODO add actual sensor index value
+                    current_state = State.DRIVE_HOME
+
+            elif current_state == State.DRIVE_HOME:
+                if drive_home_check(odom_q.get_nowait()):  # TODO how are we checking if we made it home
+                    current_state == State.FINISH
+
+            elif current_state == State.FINISH:
+                pass
+
+            else:
+                print("you shouldn't be here")
+                raise RuntimeError()
         except queue.Empty:
             pass
-        try:
-            print(sens_q.get_nowait())
-        except queue.Empty:
+
+        # State Actions
+        if current_state == State.INIT:
             pass
+        elif current_state == State.IR_START:
+            pass
+        elif current_state == State.DRIVE_TO_CENTER:
+            pass
+        elif current_state == State.SPIN_CYCLE:
+            pass
+        elif current_state == State.DRIVE_TO_BALL:
+            pass
+        elif current_state == State.BACK_UP:
+            pass
+        elif current_state == State.IR_FINISH:
+            pass
+        elif current_state == State.DRIVE_HOME:
+            pass
+        elif current_state == State.FINISH:
+            pass
+        else:
+            print("you shouldn't be here")
+            raise RuntimeError()
 
 
 main()
