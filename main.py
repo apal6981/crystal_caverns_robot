@@ -1,6 +1,4 @@
-from dis import dis
 import threading, queue, serial
-from regex import R
 import numpy as np
 from gpiozero import Motor
 
@@ -9,8 +7,8 @@ odom_q = queue.Queue(1)
 sens_q = queue.Queue(1)
 
 # motor objects
-motor_l = Motor(2, 3)
-motor_r = Motor(9, 10)
+motor_l = Motor(3, 2)
+motor_r = Motor(10, 9)
 
 # read from the arduino, Send the four sensor values along to the the main thread
 def arduino_read():
@@ -48,7 +46,7 @@ def teensy_read():
     prev_l, prev_r = ser.readline().decode().rstrip().split(" ")
     prev_l = int(prev_l)
     prev_r = int(prev_r)
-    print(prev_l, prev_r)
+    # print(prev_l, prev_r)
 
     x = 0
     y = 0
@@ -58,7 +56,7 @@ def teensy_read():
     # wheel odometry constants
     gear_reduction = 784.0 / 81.0
     wheel_circum = 0.0905 * np.pi
-    wheel_base = 0.200  # TODO get actual value
+    wheel_base = 0.206  # TODO get actual value
     dist_const = wheel_circum / (512 * 4 * gear_reduction)
 
     while ser.is_open:
@@ -76,7 +74,7 @@ def teensy_read():
             y += d_center * np.sin(phi)
             theta += phi
             theta = minimize_angle(theta)
-            print(x, y, theta)
+            # print(x, y, theta)
 
             prev_r = right
             prev_l = left
