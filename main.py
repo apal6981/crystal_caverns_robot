@@ -1,7 +1,7 @@
 from distutils import dist
 import threading, queue, serial
 import numpy as np
-from gpiozero import Motor
+from gpiozero import Motor, Servo
 
 import time
 # thread safe queues of size one to only allow most recent message to be in it
@@ -11,6 +11,10 @@ sens_q = queue.Queue(1)
 # motor objects
 motor_l = Motor(3, 2)
 motor_r = Motor(10, 9)
+
+# servo objects
+servo_l = Servo(20)
+servo_r = Servo(21)
 
 
 # read from the arduino, Send the four sensor values along to the the main thread
@@ -42,7 +46,7 @@ def teensy_read():
         return angle
 
     # open the serial object to talk to teensy board
-    ser = serial.Serial("/dev/ttyACM0", baudrate=115200)
+    ser = serial.Serial("/dev/ttyACM1", baudrate=115200)
     ser.flushInput()
     while ser.in_waiting < 40:
         pass
@@ -118,13 +122,15 @@ def calc_theta_error(array1, array2):
 
 
 
-SENSOR_START_THRESH = 50
+SENSOR_START_THRESH = 10
 SENSOR_FINISH_THRESH = 100
-CENTER_GOAL = [1,0]
+CENTER_GOAL = [.70,0]
 
 
-KP_d = .6
+KP_d = .7
 KD_d = 0
+KP_t = .3
+KD_t = .05
 
 
 def main():
@@ -151,17 +157,19 @@ def main():
                  # check if sensor is seeing the start command
                 sensor_values = sens_q.get_nowait()
                 print(sensor_values)
-                if sensor_values[3] > SENSOR_START_THRESH:  # TODO add actual sensor index value
+                if sensor_values[3] > SENSOR_START_THRESH:  # TODO add actual sensor index value.... Done but set threshold value
                     current_state = State.DRIVE_TO_CENTER
 
             elif current_state == State.DRIVE_TO_CENTER:
                 # check to see if we made it to the center
                 if center:  # TODO how are we checking if we made it to the center
+                    print("Enter the spin cycle, time to get groovy")
                     current_state = State.SPIN_CYCLE
 
             elif current_state == State.SPIN_CYCLE:
                 # check if ball is aligned enough
                 if frame_centered:
+                    print("driving to ball")
                     current_state = State.DRIVE_TO_BALL
 
             elif current_state == State.DRIVE_TO_BALL:
@@ -194,6 +202,9 @@ def main():
         try:
             # State Actions
             if current_state == State.INIT:
+                # Bring arm up to middle
+                # servo_l.max()
+                # servo_r.max()
                 pass
             elif current_state == State.IR_START:
                 pass
@@ -207,13 +218,17 @@ def main():
                     print("in the center")
                     continue
                 # theta_err = 
-                motor_command = max(min(KP_d*dist_err-KD_d*odom[3], .6),.2)
-                print("odom:",odom,"dist error:", dist_err, "new motor command:",motor_command)
-                motor_l.forward(motor_command+.028)
-                motor_r.forward(motor_command)
+                motor_command = max(min(KP_d*dist_err-KD_d*odom[3], .7),.4)
+                theta_err = calc_theta_error([CENTER_GOAL[0]-odom[0],CENTER_GOAL[1]-odom[1]],[dist_err*np.cos(odom[3]),dist_err*np.sin(odom[3])])
+                theta_adjust = KP_t*theta_err- KD_t*odom[4]
+                print("odom:",odom[:3],"dist error:", dist_err, "new motor command:",motor_command, "theta err:", theta_err, "theta Adjust:",theta_adjust)
+                motor_l.forward(motor_command-theta_adjust)
+                motor_r.forward(motor_command+theta_adjust)
 
                 pass
             elif current_state == State.SPIN_CYCLE:
+                motor_l.backward(.17)
+                motor_r.forward(.17)
                 
                 pass
             elif current_state == State.DRIVE_TO_BALL:
@@ -234,4 +249,4 @@ def main():
             pass
 
 
-# main()
+main()
