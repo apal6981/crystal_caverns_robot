@@ -261,7 +261,7 @@ class Camera:
         ##### Template
         w, h = self.template.shape[::-1]
         method = cv2.TM_CCOEFF
-        res = cv2.matchTemplate(gray_color,template,method)
+        res = cv2.matchTemplate(gray_color,self.template,method)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
         top_left = max_loc
         if top_left[0] < 20 and self.prev_lx > 240:
