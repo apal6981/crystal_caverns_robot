@@ -276,14 +276,29 @@ class Camera:
             cv2.rectangle(gray_color,top_left, bottom_right, 255, 2)
             cv2.imshow("template", gray_color)
 
+        dist_array = []
+        total_dist = 0
+        for i in range(3):
+            dist = aligned_depth_frame.get_distance(int(((xR-xL)/2+xL)*1.33), int((yB-i*3)*1.5))
+            if dist < 0.05:
+                continue
+            dist_array.append(dist)
+        
+        if dist_array == []:
+            total_dist = 1
+            print("Dist array is 0!")
+        else:
+            total_dist = np.average(np.array(dist_array))
+
+
         if num_circles >= 1 and stop_flag == True:
             self.num_frames_found += 1
             if self.num_frames_found >= 1:   # Num frams ball must be found before detection is raised
-                return True, ((xR-xL)/2+xL)/480, aligned_depth_frame.get_distance(int(int(((xR-xL)/2+xL)*1.33), int(yB*1.5))) # Raise flag
-            return False, ((xR-xL)/2+xL)/480, aligned_depth_frame.get_distance(int(((xR-xL)/2+xL)*1.33), int(yB*1.5))
+                return True, ((xR-xL)/2+xL)/480, total_dist  # Raise flag
+            return False, ((xR-xL)/2+xL)/480, total_dist
         else:
             self.num_frames_found = 0
-            return False, ((xR-xL)/2+xL)/480, aligned_depth_frame.get_distance(int(((xR-xL)/2+xL)*1.33), int(yB*1.5))
+            return False, ((xR-xL)/2+xL)/480, total_dist
 
         if self.display == True:
             cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
@@ -394,8 +409,31 @@ class Camera:
             cv2.imshow('white', gray_color)
             cv2.waitKey(1)
 
-    def drive_to_bal(self):
-        return aligned_depth_frame.get_distance(int(center), int(top_left[1]-15))
+    def drive_to_ball(self):
+        frames = self.pipeline.wait_for_frames()
+        # frames.get_depth_frame() is a 640x360 depth image
+
+        # Align the depth frame to color frame
+        aligned_frames = self.align.process(frames)
+
+        # Get aligned frames
+        aligned_depth_frame = aligned_frames.get_depth_frame() # aligned_depth_frame is a 640x480 depth image
+        
+        dist_array = []
+        total_dist = 0
+        for i in range(3):
+            dist = aligned_depth_frame.get_distance(int(center), int(top_left[1]-(i*4)))
+            if dist < 0.05:
+                continue
+            dist_array.append(dist)
+        
+        if dist_array == []:
+            total_dist = 1
+            print("Dist array is 0!")
+        else:
+            total_dist = np.average(np.array(dist_array))
+
+        return total_dist
 
     def stop_pipeline(self):
         pipeline.stop()
