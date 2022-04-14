@@ -48,13 +48,8 @@ def arduino_read():
         try:
             drive_command = drive_q.get_nowait()
             ard.write(
-                str(
-                    (drive_command[0]).zfill(4)
-                    + " "
-                    + str(drive_command[1]).zfill(4)
-                    + " "
-                ).encode("utf-8)")
-            )
+                (str(drive_command[0]).zfill(4)+ " "+ str(drive_command[1]).zfill(4)+ " ").encode("utf-8"))
+            
         except queue.Empty:
             pass
 
@@ -106,7 +101,7 @@ def calc_orientation(val):
     l_scale = 0
     r_scale = 0
 
-    return (l_baseline + (val * l_scale)), (r_baseline + (1 - val) * r_scale)
+    return int((l_baseline + (val * l_scale))), int((r_baseline + (1 - val) * r_scale))
 
 
 SENSOR_START_THRESH = -1

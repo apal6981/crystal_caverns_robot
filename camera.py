@@ -269,7 +269,7 @@ class Camera:
             self.current_corner -= 1
             if self.current_corner == -1:
                 self.current_corner = 7
-            print(frame_num, "viewing corner #", self.current_corner)
+            # print(frame_num, "viewing corner #", self.current_corner)
         self.prev_lx = top_left[0]
         if self.display == True:
             bottom_right = (top_left[0] + w, top_left[1] + h)
