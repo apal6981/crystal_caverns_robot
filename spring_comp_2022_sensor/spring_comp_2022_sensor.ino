@@ -15,12 +15,12 @@ Servo Lservo;
 Servo Rservo;
 
 void setup() {
-  Lservo.attach(4);
+  Lservo.attach(3);
   Rservo.attach(5);
 // read_bytes = 0;
- Serial.begin(115200);
- Timer1.initialize(100000);
- Timer1.attachInterrupt(printValues);
+ Serial.begin(9600);
+// Timer1.initialize(100000);
+// Timer1.attachInterrupt(printValues);
 }
 
 void printValues() {
@@ -33,10 +33,13 @@ void loop() {
   // put your main code here, to run repeatedly:
 //  Serial.println(send_msg);
   if (Serial.available() > 9) {
-//     long left = Serial.parseInt();
-//     long right = Serial.parseInt();
-     Lservo.write(Serial.parseInt());
-     Rservo.write(Serial.parseInt());
+     long left = Serial.parseInt();
+     long right = Serial.parseInt();
+     Lservo.writeMicroseconds(left);
+     delay(10);
+     Rservo.writeMicroseconds(right);
+     delay(10);
+     Serial.print("left ");Serial.println(left);
      }
 }
   
