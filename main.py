@@ -29,20 +29,20 @@ real_cam = camera.Camera()
 
 # read from the arduino, Send the four sensor values along to the the main thread
 def arduino_read():
-    ard = serial.Serial("/dev/ttyUSB0", baudrate=115200)
+    ard = serial.Serial("/dev/ttyUSB0", baudrate=9600)
     ard.flushInput()
     while True:
         # print("waiting for ard bytes",ard.in_waiting)
-        if ard.in_waiting > 20:
-            sens_values = ard.readline().decode().rstrip().split(" ")
-            sens_q.put(
-                [
-                    int(sens_values[0]),
-                    int(sens_values[1]),
-                    int(sens_values[2]),
-                    int(sens_values[3]),
-                ]
-            )
+        # if ard.in_waiting > 20:
+        #     sens_values = ard.readline().decode().rstrip().split(" ")
+        #     sens_q.put(
+        #         [
+        #             int(sens_values[0]),
+        #             int(sens_values[1]),
+        #             int(sens_values[2]),
+        #             int(sens_values[3]),
+        #         ]
+        #     )
         try:
             drive_command = drive_q.get_nowait()
             ard.write(
@@ -126,6 +126,7 @@ def main():
 
     way_point_index = 0
     ball_depth = 0
+    d_goal = .7
 
     # run the state machine
     while True:
@@ -199,10 +200,11 @@ def main():
                 pass
             elif current_state == State.DRIVE_TO_CENTER:
                 # drive_q.put[180, 180]
-                dist, val = find_middle()
+                ball_found, val, dist = real_cam.find_ball()
 
                 if dist <= d_goal:
-                    break
+                    center = True
+                    continue
 
                 l_val, r_val = calc_orientation(val)
                 drive_q.put([l_val, r_val])
@@ -210,6 +212,15 @@ def main():
                 pass
 
             elif current_state == State.SPIN_CYCLE:
+                ball_found, val, dist = real_cam.find_ball()
+                if ball_found:
+                    if .6 < val < .7:
+                        drive_q.put([1508,1498])
+                        frame_centered = True
+                        continue
+                    
+
+                drive_q.put([1550,1450])
                 pass
 
             elif current_state == State.DRIVE_TO_BALL:
