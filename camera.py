@@ -277,13 +277,12 @@ class Camera:
 
         if num_circles >= 1 and stop_flag == True:
             self.num_frames_found += 1
-            if self.num_frames_found >= 2:   # Num frams ball must be found before detection is raised
+            if self.num_frames_found >= 1:   # Num frams ball must be found before detection is raised
                 return True, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB)) # Raise flag
             return False, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB))
         else:
             self.num_frames_found = 0
             return False, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB))
-
 
         if self.display == True:
             cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
@@ -306,5 +305,96 @@ class Camera:
             cv2.imshow('white', gray_color)
             cv2.waitKey(1)
         
-        def stop_pipeline(self):
-            pipeline.stop()
+    def stop_pipeline(self):
+        pipeline.stop()
+
+    def find_corner(self):
+    # Streaming loop
+        ball_x_loc = 0
+        stop_flag = False
+        num_circles = 0
+        # Get frameset of color and depth
+        frames = self.pipeline.wait_for_frames()
+        # frames.get_depth_frame() is a 640x360 depth image
+
+        # Align the depth frame to color frame
+        aligned_frames = self.align.process(frames)
+
+        # Get aligned frames
+        aligned_depth_frame = aligned_frames.get_depth_frame() # aligned_depth_frame is a 640x480 depth image
+        color_frame = aligned_frames.get_color_frame()
+
+        depth_color_frame = self.colorizer.colorize(aligned_depth_frame)
+        depth_color_image = np.asanyarray(depth_color_frame.get_data())        
+
+        depth_image = np.asanyarray(aligned_depth_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
+
+        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+        # Images gathered, ready to be processed
+
+        # Time to resize images
+        height, width, layers = color_image.shape
+        new_h = 240
+        new_w = 480
+        color_image = cv2.resize(color_image, (new_w, new_h))
+        depth_image = cv2.resize(depth_image, (new_w, new_h))
+
+        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+
+        # Equalize depth image
+        depth_gray = cv2.cvtColor(depth_colormap, cv2.COLOR_BGR2GRAY)
+        depth_gray = cv2.equalizeHist(depth_gray)
+
+        # Erode and Dilate gray depth image
+        erode_kernel = np.ones((21, 21))
+        kernel = np.ones((11, 11), np.uint8)
+        depth_gray = cv2.erode(depth_gray, erode_kernel, iterations=1)
+        depth_gray = cv2.dilate(depth_gray, kernel, iterations=1)
+
+        # Erode, dilate, and threshold color image to find white lines/ ball
+        gray_color = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
+        erode_kernel = np.ones((5, 5))
+        kernel = np.ones((5, 5), np.uint8)
+        _, gray_color = cv2.threshold(gray_color, 220, 255, cv2.THRESH_BINARY)
+        gray_color = cv2.erode(gray_color, erode_kernel, iterations=1)
+        gray_color = cv2.dilate(gray_color, kernel, iterations=1)
+
+        # Find max values across all columns, then find highest 255 value
+        gray_color_temp = gray_color[50:-17, 100:-100]
+        white_vals = np.amax(gray_color_temp, axis=1)
+        y_idx = (white_vals!=0).argmax()
+        x_idx = (gray_color_temp[y_idx]!=0).argmax()
+
+        ##### Template
+        w, h = self.template.shape[::-1]
+        method = cv2.TM_CCOEFF
+        res = cv2.matchTemplate(gray_color,template,method)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+        top_left = max_loc
+        if top_left[0] < 20 and self.prev_lx > 240:
+            self.current_corner -= 1
+            if self.current_corner == -1:
+                self.current_corner = 7
+            print(frame_num, "viewing corner #", self.current_corner)
+        self.prev_lx = top_left[0]
+
+        if self.display == True:
+            bottom_right = (top_left[0] + w, top_left[1] + h)
+            cv2.rectangle(gray_color,top_left, bottom_right, 255, 2)
+            cv2.imshow("template", gray_color)
+
+        center = (top_right[0] - top_left[0])/2 + top_left[0]
+
+        return True, center, depth_frame.get_distance(int(center), int(top_left[1]-15)) # Raise flag
+
+        if self.display == True:
+            cv2.namedWindow('Depth', cv2.WINDOW_NORMAL)
+            cv2.imshow('Depth', depth_colormap) #depth_gray)
+
+            cv2.namedWindow('white', cv2.WINDOW_NORMAL)
+            cv2.imshow('white', gray_color)
+            cv2.waitKey(1)
+        
+    def stop_pipeline(self):
+        pipeline.stop()
