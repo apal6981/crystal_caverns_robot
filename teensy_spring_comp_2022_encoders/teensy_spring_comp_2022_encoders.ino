@@ -8,7 +8,7 @@
 
 
 TeensyTimer ITimer(TEENSY_TIMER_1);
-#define HW_TIMER_INTERVAL_MS 50L
+#define HW_TIMER_INTERVAL_MS 5L
 
 Encoder left(22,21);
 Encoder right(17,18);
