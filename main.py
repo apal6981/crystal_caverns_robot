@@ -140,13 +140,15 @@ def main():
 
             elif current_state == State.IR_START:
                 # check if sensor is seeing the start command
-                sensor_values = sens_q.get_nowait()
-                print(sensor_values)
-                if (
-                    sensor_values[3] > SENSOR_START_THRESH
-                ):  # TODO add actual sensor index value.... Done but set threshold value
-                    current_state = State.DRIVE_TO_CENTER
-                    set_arm(85)
+                # sensor_values = sens_q.get_nowait()
+                # print(sensor_values)
+                # if (
+                #     sensor_values[3] > SENSOR_START_THRESH
+                # ):  # TODO add actual sensor index value.... Done but set threshold value
+                #     current_state = State.DRIVE_TO_CENTER
+                #     set_arm(85)
+                current_state = State.DRIVE_TO_CENTER
+                print("we are going driving")
 
             elif current_state == State.DRIVE_TO_CENTER:
                 # check to see if we made it to the center

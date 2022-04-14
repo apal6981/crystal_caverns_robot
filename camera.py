@@ -78,6 +78,7 @@ class Camera:
 
         color_frame = aligned_frames.get_color_frame()
         depth_color_frame = self.colorizer.colorize(aligned_depth_frame)
+        print("frames have been gathered")
 
     def find_circles(self, frame): #, x, y, radius):    
         # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
