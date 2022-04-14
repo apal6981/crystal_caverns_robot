@@ -35,24 +35,7 @@ def arduino_read():
     ard.flushInput()
     while True:
         # print("waiting for ard bytes",ard.in_waiting)
-        if ard.in_waiting > 20:
-            in_wait = ard.in_waiting
-            in_wait -= in_wait % 21
-            # print(in_wait)
-            # while in_wait > 40:
-            #     print(in_wait)
-            #     in_wait -= 41
-            #     stuff = ser.read(in_wait)
-            sens_values = ser.read(in_wait)[-21:-2].decode().rstrip().split(" ")
-            # sens_values = ard.readline().decode().rstrip().split(" ")
-            sens_q.put(
-                [
-                    int(sens_values[0]),
-                    int(sens_values[1]),
-                    int(sens_values[2]),
-                    int(sens_values[3]),
-                ]
-            )
+        # ipython)
         try:
             drive_command = drive_q.get_nowait()
             ard.write(
@@ -139,6 +122,7 @@ def main():
         try:
             if current_state == State.INIT:
                 current_state = State.IR_START
+                drive_q.put([1508,1498])
                 set_arm(30)
 
             elif current_state == State.IR_START:
@@ -176,7 +160,7 @@ def main():
                 if center:  # TODO how are we checking if we made it to the center
                     print("go towards the light")
                     current_state = State.IR_FINISH
-                    drive_q.put([1518,1485]])
+                    drive_q.put([1518,1485])
 
             elif current_state == State.IR_FINISH:
                 # Start corner as been identified
@@ -247,7 +231,7 @@ def main():
             elif current_state == State.BACK_UP:
 
                 drive_q.put([1600,1600])
-                time.sleep(1)
+                time.sleep(2)
                 drive_q.put([1508,1498])
                 print("back uped")
                 pass

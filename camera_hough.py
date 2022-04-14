@@ -134,17 +134,14 @@ class Camera:
         depth_image = np.asanyarray(aligned_depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
 
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+        # depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
         # Images gathered, ready to be processed
 
         if self.writer_c is None:
             self.writer_c = cv2.VideoWriter(self.video_name_c, cv2.VideoWriter_fourcc(*'MJPG'), self.fps, (color_image.shape[1], color_image.shape[0]), True)
-            self.writer_d = cv2.VideoWriter(self.video_name_d, cv2.VideoWriter_fourcc(*'MJPG'), self.fps, (depth_colormap.shape[1], depth_colormap.shape[0]), True)
+            self.writer_d = cv2.VideoWriter(self.video_name_d, cv2.VideoWriter_fourcc(*'MJPG'), self.fps, (color_image.shape[1], color_image.shape[0]), True)
 
-        self.writer_c.write(color_image)
-        self.writer_d.write(depth_colormap)
-
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+        # depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
 
         # Erode, dilate, and threshold color image to find white lines/ ball
         gray_color = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
@@ -155,8 +152,10 @@ class Camera:
         gray_color = cv2.dilate(gray_color, kernel, iterations=1)
 
         circles_color = self.find_circles(gray_color)
-
-       
+        circle_image = self.draw_circles(circles_color, color_image, 0, 0)
+        self.writer_c.write(gray_color)
+        self.writer_d.write(circle_image)
+        
         ##### Template
         # w, h = self.template.shape[::-1]
         # method = cv2.TM_CCOEFF
