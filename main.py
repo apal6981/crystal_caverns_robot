@@ -1,7 +1,8 @@
-from distutils import dist
+# from distutils import dist
 import threading, queue, serial
 import numpy as np
-from gpiozero import Motor, Servo
+from gpiozero import Motor
+import RPi.GPIO as GPIO
 
 import time
 # thread safe queues of size one to only allow most recent message to be in it
@@ -13,8 +14,13 @@ motor_l = Motor(3, 2)
 motor_r = Motor(10, 9)
 
 # servo objects
-servo_l = Servo(20)
-servo_r = Servo(21)
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(20, GPIO.OUT)
+GPIO.setup(21, GPIO.OUT)
+servo_l=GPIO.PWM(20, 50)
+servo_r=GPIO.PWM(21, 50)
+servo_l.start(0)
+servo_r.start(0)
 
 
 # read from the arduino, Send the four sensor values along to the the main thread
@@ -46,7 +52,7 @@ def teensy_read():
         return angle
 
     # open the serial object to talk to teensy board
-    ser = serial.Serial("/dev/ttyACM1", baudrate=115200)
+    ser = serial.Serial("/dev/ttyACM0", baudrate=115200)
     ser.flushInput()
     while ser.in_waiting < 40:
         pass
@@ -119,12 +125,29 @@ def calc_theta_error(array1, array2):
     cos = inner / norms
     return np.arccos(np.clip(cos, -1.0, 1.0))
 
+# Depth is in meters
+def calc_way_point(odom, depth):
+    return [depth*np.cos(odom[2])+odom[0],depth*np.sin(odom[2])+odom[1]]
 
 
+def set_arm(angle):
+    duty_l = angle / 18 + 2
+    duty_r = (135 - angle) / 18 + 2
+    GPIO.output(20, True)
+    GPIO.output(21, True)
+    servo_l.ChangeDutyCycle(duty_l)
+    servo_r.ChangeDutyCycle(duty_r)
+    # sleep(1)
+    GPIO.output(20, False)
+    GPIO.output(21, False)
+    servo_l.ChangeDutyCycle(duty_l)
+    servo_r.ChangeDutyCycle(duty_r)
 
 SENSOR_START_THRESH = 10
 SENSOR_FINISH_THRESH = 100
 CENTER_GOAL = [.70,0]
+BALL_GOAL = [1.2, 0]
+HOME_GOAL = [.1,0]
 
 
 KP_d = .7
@@ -146,12 +169,15 @@ def main():
     frame_centered = False
     home = False
 
+    odom = [0,0,0,0,0]
+
     # run the state machine
     while True:
         # state transitions
         try:
             if current_state == State.INIT:
                 current_state = State.IR_START
+                set_arm(0)
 
             elif current_state == State.IR_START:
                  # check if sensor is seeing the start command
@@ -159,6 +185,7 @@ def main():
                 print(sensor_values)
                 if sensor_values[3] > SENSOR_START_THRESH:  # TODO add actual sensor index value.... Done but set threshold value
                     current_state = State.DRIVE_TO_CENTER
+                    set_arm(85)
 
             elif current_state == State.DRIVE_TO_CENTER:
                 # check to see if we made it to the center
@@ -169,25 +196,33 @@ def main():
             elif current_state == State.SPIN_CYCLE:
                 # check if ball is aligned enough
                 if frame_centered:
+                    motor_l.stop()
+                    motor_r.stop()
                     print("driving to ball")
                     current_state = State.DRIVE_TO_BALL
+                    BALL_GOAL = calc_way_point(odom, depth)
 
             elif current_state == State.DRIVE_TO_BALL:
                 # check to see if we have the ball
                 if have_ball:
+                    print("beep.....beep.....beep")
+                    set_arm(130)
                     current_state = State.BACK_UP
 
             elif current_state == State.BACK_UP:
                 if center:  # TODO how are we checking if we made it to the center
+                    print("go towards the light")
                     current_state = State.IR_FINISH
 
             elif current_state == State.IR_FINISH:
                 # Start corner as been identified
                 if sens_q.get_nowait()[0] > SENSOR_FINISH_THRESH:  # TODO add actual sensor index value
+                    print("Found the holy light, now stay on the straight and narrow")
                     current_state = State.DRIVE_HOME
 
             elif current_state == State.DRIVE_HOME:
                 if home:  # TODO how are we checking if we made it home
+                    print("you made it home")
                     current_state == State.FINISH
 
             elif current_state == State.FINISH:
@@ -202,9 +237,6 @@ def main():
         try:
             # State Actions
             if current_state == State.INIT:
-                # Bring arm up to middle
-                # servo_l.max()
-                # servo_r.max()
                 pass
             elif current_state == State.IR_START:
                 pass
@@ -225,21 +257,72 @@ def main():
                 motor_l.forward(motor_command-theta_adjust)
                 motor_r.forward(motor_command+theta_adjust)
 
-                pass
             elif current_state == State.SPIN_CYCLE:
                 motor_l.backward(.17)
                 motor_r.forward(.17)
                 
                 pass
             elif current_state == State.DRIVE_TO_BALL:
-                pass
+                odom = odom_q.get_nowait()
+                dist_err = np.sqrt((odom[0]-BALL_GOAL[0])**2+(odom[1]-BALL_GOAL[1])**2)
+                if dist_err < .05:
+                    motor_l.stop()
+                    motor_r.stop()
+                    center = True
+                    print("in the center")
+                    continue
+                # theta_err = 
+                motor_command = max(min(KP_d*dist_err-KD_d*odom[3], .7),.4)
+                theta_err = calc_theta_error([BALL_GOAL[0]-odom[0],BALL_GOAL[1]-odom[1]],[dist_err*np.cos(odom[3]),dist_err*np.sin(odom[3])])
+                theta_adjust = KP_t*theta_err- KD_t*odom[4]
+                print("odom:",odom[:3],"dist error:", dist_err, "new motor command:",motor_command, "theta err:", theta_err, "theta Adjust:",theta_adjust)
+                motor_l.forward(motor_command-theta_adjust)
+                motor_r.forward(motor_command+theta_adjust)
             elif current_state == State.BACK_UP:
-                pass
+                odom = odom_q.get_nowait()
+                dist_err = np.sqrt((odom[0]-CENTER_GOAL[0])**2+(odom[1]-CENTER_GOAL[1])**2)
+                if dist_err < .05:
+                    motor_l.stop()
+                    motor_r.stop()
+                    center = True
+                    print("in the center")
+                    continue
+                # theta_err = 
+                motor_command = max(min(KP_d*dist_err-KD_d*odom[3], .7),.4)
+                theta_err = calc_theta_error([CENTER_GOAL[0]-odom[0],CENTER_GOAL[1]-odom[1]],[dist_err*np.cos(odom[3]),dist_err*np.sin(odom[3])])
+                theta_adjust = KP_t*theta_err- KD_t*odom[4]
+                print("odom:",odom[:3],"dist error:", dist_err, "new motor command:",motor_command, "theta err:", theta_err, "theta Adjust:",theta_adjust)
+                motor_l.backward(motor_command-theta_adjust)
+                motor_r.backward(motor_command+theta_adjust)
             elif current_state == State.IR_FINISH:
+
                 pass
             elif current_state == State.DRIVE_HOME:
+                odom = odom_q.get_nowait()
+                dist_err = np.sqrt((odom[0]-CENTER_GOAL[0])**2+(odom[1]-CENTER_GOAL[1])**2)
+                if dist_err < .1:
+                    motor_l.stop()
+                    motor_r.stop()
+                    center = True
+                    print("in the center")
+                    continue
+                # theta_err = 
+                motor_command = max(min(KP_d*dist_err-KD_d*odom[3], .7),.4)
+                theta_err = calc_theta_error([CENTER_GOAL[0]-odom[0],CENTER_GOAL[1]-odom[1]],[dist_err*np.cos(odom[3]),dist_err*np.sin(odom[3])])
+                theta_adjust = KP_t*theta_err- KD_t*odom[4]
+                print("odom:",odom[:3],"dist error:", dist_err, "new motor command:",motor_command, "theta err:", theta_err, "theta Adjust:",theta_adjust)
+                motor_l.forward(motor_command-theta_adjust)
+                motor_r.forward(motor_command+theta_adjust)
                 pass
             elif current_state == State.FINISH:
+                motor_l.stop()
+                motor_r.stop()
+
+                # Free GPIO from servos
+                servo_l.stop()
+                servo_r.stop()
+                GPIO.cleanup()
+
                 pass
             else:
                 print("you shouldn't be here")
