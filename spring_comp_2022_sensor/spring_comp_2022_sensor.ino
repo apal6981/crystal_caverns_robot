@@ -6,8 +6,11 @@
 #define SENSOR_3 A3
 
 //volatile char send_msg[21];
+char incoming_msg[3];
+//int read_bytes;
 
 void setup() {
+// read_bytes = 0;
  Serial.begin(115200);
  Timer1.initialize(100000);
  Timer1.attachInterrupt(printValues);
@@ -22,5 +25,9 @@ void printValues() {
 void loop() {
   // put your main code here, to run repeatedly:
 //  Serial.println(send_msg);
-  
+  if (Serial.available() > 9) {
+     long left = Serial.parseInt();
+     long right = Serial.parseInt();
+     }
 }
+  
