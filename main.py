@@ -200,7 +200,7 @@ def main():
             elif current_state == State.DRIVE_TO_CENTER:
                 # drive_q.put[180, 180]
                 ball_found, val, dist = real_cam.find_ball()
-
+                print("val:", val, "dist:",dist)
                 if dist <= d_goal:
                     center = True
                     continue
@@ -213,7 +213,9 @@ def main():
             elif current_state == State.SPIN_CYCLE:
                 ball_found, val, dist = real_cam.find_ball()
                 if ball_found:
+                    print("ball found")
                     if .6 < val < .7:
+                        print("ball centered")
                         drive_q.put([1508,1498])
                         frame_centered = True
                         continue
