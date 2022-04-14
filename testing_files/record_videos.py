@@ -13,7 +13,7 @@ import numpy as np
 # Import OpenCV for easy image rendering
 import cv2
 
-display = False
+display = True
 
 # Create a pipeline
 pipeline = rs.pipeline()
@@ -87,23 +87,14 @@ try:
 
         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
         if display == True:
-            cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
-            cv2.imshow('Hough Circle Color', color_image_circle)
-
-            cv2.namedWindow('canny_image_circle', cv2.WINDOW_NORMAL)
-            cv2.imshow('canny_image_circle', canny_image_circle)
-
-            cv2.namedWindow('Color Contour', cv2.WINDOW_NORMAL)
-            cv2.imshow('Color Contour', color_image_contour)
+            # cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
+            # cv2.imshow('Hough Circle Color', color_image_circle)
 
             cv2.namedWindow('Depth', cv2.WINDOW_NORMAL)
-            cv2.imshow('Depth', depth_colormap) #depth_gray)
+            cv2.imshow('Depth', depth_colormap)
 
-            cv2.namedWindow('Depth_hist', cv2.WINDOW_NORMAL)
-            cv2.imshow('Depth_hist', depth_gray)
-
-            cv2.namedWindow('white', cv2.WINDOW_NORMAL)
-            cv2.imshow('white', gray_color)
+            cv2.namedWindow('Color', cv2.WINDOW_NORMAL)
+            cv2.imshow('Color', color_image)
             cv2.waitKey(1)
         
         if writer_c is None:
@@ -114,6 +105,3 @@ try:
         writer_d.write(depth_colormap)
 finally:
     pipeline.stop()
-
-
-
