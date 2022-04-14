@@ -6,7 +6,7 @@ import RPi.GPIO as GPIO
 
 import time
 
-import camera_hough
+import camera_hough as camera
 
 # thread safe queues of size one to only allow most recent message to be in it
 # odom_q = queue.Queue(1)
