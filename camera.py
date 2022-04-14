@@ -20,7 +20,9 @@ class Camera:
             # Create a pipeline
         print("start pipeline")
         self.pipeline = rs.pipeline()
-
+        self.template = cv2.imread('mask_2_template.png',0)
+        self.prev_lx = 480
+        self.current_corner = 4
         # Create a config and configure the pipeline to stream
         #  different resolutions of color and depth streams
         print("config")
@@ -256,15 +258,31 @@ class Camera:
                 depth_colormap = cv2.circle(depth_colormap,
                                 (xL+int(M['m10'] / M['m00']), yT+int(M['m01'] / M['m00'])), int(new_size), (0, 255, 0), -1)
 
+        ##### Template
+        w, h = self.template.shape[::-1]
+        method = cv2.TM_CCOEFF
+        res = cv2.matchTemplate(gray_color,template,method)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+        top_left = max_loc
+        if top_left[0] < 20 and self.prev_lx > 240:
+            self.current_corner -= 1
+            if self.current_corner == -1:
+                self.current_corner = 7
+            print(frame_num, "viewing corner #", self.current_corner)
+        self.prev_lx = top_left[0]
+        if self.display == True:
+            bottom_right = (top_left[0] + w, top_left[1] + h)
+            cv2.rectangle(gray_color,top_left, bottom_right, 255, 2)
+            cv2.imshow("template", gray_color)
 
         if num_circles >= 1 and stop_flag == True:
             self.num_frames_found += 1
             if self.num_frames_found >= 2:   # Num frams ball must be found before detection is raised
-                return True, (xR-xL)/2, depth_frame.get_distance(int((xR-xL)/2), int(yB)) # Raise flag
-            return False, 0 ,0
+                return True, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB)) # Raise flag
+            return False, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB))
         else:
             self.num_frames_found = 0
-            return False, 0, 0
+            return False, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB))
 
 
         if self.display == True:
