@@ -29,30 +29,25 @@ real_cam = camera.Camera()
 
 # read from the arduino, Send the four sensor values along to the the main thread
 def arduino_read():
-    ard = serial.Serial("/dev/ttyUSB0", baudrate=115200)
+    ard = serial.Serial("/dev/ttyUSB0", baudrate=9600)
     ard.flushInput()
     while True:
         # print("waiting for ard bytes",ard.in_waiting)
-        if ard.in_waiting > 20:
-            sens_values = ard.readline().decode().rstrip().split(" ")
-            sens_q.put(
-                [
-                    int(sens_values[0]),
-                    int(sens_values[1]),
-                    int(sens_values[2]),
-                    int(sens_values[3]),
-                ]
-            )
+        if ard.in_waiting > 10:
+            print(ard.readline().decode().rstrip())
+        #     sens_values = ard.readline().decode().rstrip().split(" ")
+        #     sens_q.put(
+        #         [
+        #             int(sens_values[0]),
+        #             int(sens_values[1]),
+        #             int(sens_values[2]),
+        #             int(sens_values[3]),
+        #         ]
+        #     )
         try:
             drive_command = drive_q.get_nowait()
-            ard.write(
-                str(
-                    (drive_command[0]).zfill(4)
-                    + " "
-                    + str(drive_command[1]).zfill(4)
-                    + " "
-                ).encode("utf-8)")
-            )
+            ard.write((
+                str(drive_command[0]).zfill(4) + " "+ str(drive_command[1]).zfill(4)+ " ").encode("utf-8"))
         except queue.Empty:
             pass
 
@@ -118,6 +113,9 @@ def main():
 
     way_point_index = 0
     ball_depth = 0
+    # speed_state_prev = [1399,1399]
+    # speed_state = [1400, 1400]
+    speed_counter = 0
 
     # run the state machine
     while True:
@@ -125,17 +123,18 @@ def main():
         try:
             if current_state == State.INIT:
                 current_state = State.IR_START
-                set_arm(0)
+                set_arm(30)
 
             elif current_state == State.IR_START:
                 # check if sensor is seeing the start command
-                sensor_values = sens_q.get_nowait()
-                print(sensor_values)
-                if (
-                    sensor_values[3] > SENSOR_START_THRESH
-                ):  # TODO add actual sensor index value.... Done but set threshold value
-                    current_state = State.DRIVE_TO_CENTER
-                    set_arm(85)
+                # sensor_values = sens_q.get_nowait()
+                # print(sensor_values)
+                # if (
+                #     sensor_values[3] > SENSOR_START_THRESH
+                # ):  # TODO add actual sensor index value.... Done but set threshold value
+                #     current_state = State.DRIVE_TO_CENTER
+                #     set_arm(85)
+                current_state = State.DRIVE_TO_CENTER
 
             elif current_state == State.DRIVE_TO_CENTER:
                 # check to see if we made it to the center
@@ -190,7 +189,13 @@ def main():
             elif current_state == State.IR_START:
                 pass
             elif current_state == State.DRIVE_TO_CENTER:
-                drive_q.put[92, 92]
+                
+                speed_counter += 1
+                if speed_counter >= 10000:
+                    print("here")
+                    drive_q.put([1508, 1498])
+                    speed_counter = 0
+                
                 pass
 
             elif current_state == State.SPIN_CYCLE:
