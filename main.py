@@ -149,14 +149,14 @@ def set_arm(angle):
 
 SENSOR_START_THRESH = -1
 SENSOR_FINISH_THRESH = 100
-CENTER_GOAL = [.6,0]
+CENTER_GOAL = [.5,0]
 BALL_GOAL = [1.2, 0]
 HOME_GOAL = [.1,0]
 
 
-KP_d = .7
+KP_d = .5
 KD_d = 0
-KP_t = .3
+KP_t = .35
 KD_t = .05
 
 KP_s = .2
@@ -180,6 +180,8 @@ def main():
 
     odom = [0,0,0,0,0]
     WAY_POINTS =[2,-3,-1,1,3,-2]
+    pi_fourths = np.pi/4
+
 
     # run the state machine
     while True:
@@ -195,7 +197,7 @@ def main():
                 print(sensor_values)
                 if sensor_values[3] > SENSOR_START_THRESH:  # TODO add actual sensor index value.... Done but set threshold value
                     current_state = State.DRIVE_TO_CENTER
-                    set_arm(85)
+                    set_arm(60)
 
             elif current_state == State.DRIVE_TO_CENTER:
                 # check to see if we made it to the center
@@ -253,19 +255,21 @@ def main():
             elif current_state == State.DRIVE_TO_CENTER:
                 odom = odom_q.get_nowait()
                 dist_err = np.sqrt((odom[0]-CENTER_GOAL[0])**2+(odom[1]-CENTER_GOAL[1])**2)
-                if dist_err < .05:
+                if dist_err < .1:
+                    motor_l.value = -.1
+                    motor_r.value = -.1
                     motor_l.stop()
                     motor_r.stop()
                     center = True
                     print("in the center")
                     continue
                 # theta_err = 
-                motor_command = max(min(KP_d*dist_err-KD_d*odom[3], .7),.4)
+                motor_command = max(min(KP_d*dist_err-KD_d*odom[3], .7),.25)
                 theta_err = calc_theta_error([CENTER_GOAL[0]-odom[0],CENTER_GOAL[1]-odom[1]],[dist_err*np.cos(odom[3]),dist_err*np.sin(odom[3])])
                 theta_adjust = KP_t*theta_err- KD_t*odom[4]
                 print("odom:",odom[:3],"dist error:", dist_err, "new motor command:",motor_command, "theta err:", theta_err, "theta Adjust:",theta_adjust)
-                motor_l.forward(motor_command-theta_adjust)
-                motor_r.forward(motor_command+theta_adjust)
+                motor_l.forward(motor_command+theta_adjust)
+                motor_r.forward(motor_command-theta_adjust)
 
             elif current_state == State.SPIN_CYCLE:
                 ball_found, x, ball_depth = real_cam.find_ball()
@@ -280,7 +284,7 @@ def main():
             # start = abs(odom[2])
 
             # theta_err = min(2*np.pi-start+goal, goal+start)
-                theta_err = (WAY_POINTS[way_point_index] % 4 + abs(odom[2] % -4) if WAY_POINTS[way_point_index] < 0 and odom[2] >= 0 else WAY_POINTS[way_point_index]-odom[2])*np.pi/4
+                theta_err = (WAY_POINTS[way_point_index]*pi_fourths % np.pi + abs(odom[2] % -np.pi) if WAY_POINTS[way_point_index]*pi_fourths < 0 and odom[2] >= 0 else WAY_POINTS[way_point_index]*pi_fourths-odom[2])
 
                 if theta_err < .1:
                     way_point_index += 1
@@ -291,7 +295,7 @@ def main():
                         motor_r.stop()
                         exit(0)
                     continue
-                motor_command = max(min(KP_s*theta_err, .2),.15)
+                motor_command = max(min(KP_s*theta_err, .15),.12)
                 print("err:",theta_err,"speed:", motor_command,"orient:",odom[2],"waypoint:",WAY_POINTS[way_point_index])
                 motor_l.value = -motor_command
                 motor_r.value = motor_command
