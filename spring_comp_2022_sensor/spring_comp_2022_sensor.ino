@@ -1,3 +1,5 @@
+#include <Servo.h>
+
 #include <TimerOne.h>
 
 #define SENSOR_0 A0
@@ -9,7 +11,12 @@
 char incoming_msg[3];
 //int read_bytes;
 
+Servo Lservo;
+Servo Rservo;
+
 void setup() {
+  Lservo.attach(4);
+  Rservo.attach(5);
 // read_bytes = 0;
  Serial.begin(115200);
  Timer1.initialize(100000);
@@ -26,8 +33,10 @@ void loop() {
   // put your main code here, to run repeatedly:
 //  Serial.println(send_msg);
   if (Serial.available() > 9) {
-     long left = Serial.parseInt();
-     long right = Serial.parseInt();
+//     long left = Serial.parseInt();
+//     long right = Serial.parseInt();
+     Lservo.write(Serial.parseInt());
+     Rservo.write(Serial.parseInt());
      }
 }
   

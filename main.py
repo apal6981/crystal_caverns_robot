@@ -45,7 +45,14 @@ def arduino_read():
             )
         try:
             drive_command = drive_q.get_nowait()
-            ard.write(str((drive_command[0]).zfill(3)+" "+str(drive_command[1]).zfill(3)).encode('utf-8)'))
+            ard.write(
+                str(
+                    (drive_command[0]).zfill(4)
+                    + " "
+                    + str(drive_command[1]).zfill(4)
+                    + " "
+                ).encode("utf-8)")
+            )
         except queue.Empty:
             pass
 
@@ -124,8 +131,9 @@ def main():
                 # check if sensor is seeing the start command
                 sensor_values = sens_q.get_nowait()
                 print(sensor_values)
-                if sensor_values[
-                    3] > SENSOR_START_THRESH:  # TODO add actual sensor index value.... Done but set threshold value
+                if (
+                    sensor_values[3] > SENSOR_START_THRESH
+                ):  # TODO add actual sensor index value.... Done but set threshold value
                     current_state = State.DRIVE_TO_CENTER
                     set_arm(85)
 
@@ -155,7 +163,9 @@ def main():
 
             elif current_state == State.IR_FINISH:
                 # Start corner as been identified
-                if sens_q.get_nowait()[0] > SENSOR_FINISH_THRESH:  # TODO add actual sensor index value
+                if (
+                    sens_q.get_nowait()[0] > SENSOR_FINISH_THRESH
+                ):  # TODO add actual sensor index value
                     print("Found the holy light, now stay on the straight and narrow")
                     current_state = State.DRIVE_HOME
 
@@ -180,6 +190,7 @@ def main():
             elif current_state == State.IR_START:
                 pass
             elif current_state == State.DRIVE_TO_CENTER:
+                drive_q.put[180, 180]
                 pass
 
             elif current_state == State.SPIN_CYCLE:
