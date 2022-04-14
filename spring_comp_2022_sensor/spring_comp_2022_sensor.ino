@@ -9,6 +9,7 @@
 
 //volatile char send_msg[21];
 char incoming_msg[3];
+char send_msg[21];
 //int read_bytes;
 
 Servo Lservo;
@@ -38,5 +39,8 @@ void loop() {
      Lservo.write(Serial.parseInt());
      Rservo.write(Serial.parseInt());
      }
+//   char send_msg[21];
+  sprintf(send_msg,"%04d %04d %04d %04d",analogRead(SENSOR_0),analogRead(SENSOR_1),analogRead(SENSOR_2), analogRead(SENSOR_3));
+  Serial.println((send_msg));
 }
   
