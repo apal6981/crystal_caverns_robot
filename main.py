@@ -26,6 +26,8 @@ servo_r.start(0)
 
 real_cam = camera.Camera()
 
+L_STOP = 1508
+R_STOP = 1498
 
 # read from the arduino, Send the four sensor values along to the the main thread
 def arduino_read():
