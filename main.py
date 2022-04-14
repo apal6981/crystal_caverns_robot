@@ -273,7 +273,7 @@ def main():
                 if ball_found and 200 < x < 280:
                     motor_l.stop()
                     motor_r.stop()
-                    frame_centered = True:
+                    frame_centered = True
                     continue
                 odom = odom_q.get_nowait()
             # goal = abs(WAY_POINTS[way_point_index])
