@@ -13,7 +13,8 @@ import numpy as np
 # Import OpenCV for easy image rendering
 import cv2
 
-display = True
+
+display = False #True
 
 # Create a pipeline
 pipeline = rs.pipeline()
@@ -52,10 +53,15 @@ align = rs.align(align_to)
 vid_name = "realsense_record"
 video_name_c = str(vid_name + "_color.avi")
 video_name_d = str(vid_name + "_depth.avi")
-fps = 15
+fps = 7 
 writer_c = None
 writer_d = None
 # Streaming loop
+
+s = profile.get_device().query_sensors()[1]
+s.set_option(rs.option.exposure, 100)
+# print("exposure time:", s)
+
 try:
     colorizer = rs.colorizer()
     frame_num = 0
