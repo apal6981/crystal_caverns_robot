@@ -18,17 +18,20 @@ class Camera:
     def __init__(self, display=False):
         self.display = display
             # Create a pipeline
+        print("start pipeline")
         self.pipeline = rs.pipeline()
 
         # Create a config and configure the pipeline to stream
         #  different resolutions of color and depth streams
+        print("config")
         self.config = rs.config()
 
         # Get device product line for setting a supporting resolution
         pipeline_wrapper = rs.pipeline_wrapper(self.pipeline)
-        pipeline_profile = config.resolve(pipeline_wrapper)
+        pipeline_profile = self.config.resolve(pipeline_wrapper)
         device = pipeline_profile.get_device()
         device_product_line = str(device.get_info(rs.camera_info.product_line))
+        print("Wrapper stuff")
 
         self.found_rgb = False
         for s in device.sensors:
@@ -38,24 +41,41 @@ class Camera:
         if not found_rgb:
             print("The demo requires Depth camera with Color sensor")
             exit(0)
-
+        
+        print("Enable stream")
         self.config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
         self.config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
         # Start streaming
-        self.profile = pipeline.start(config)
+        self.profile = self.pipeline.start(self.config)
 
         # Create an align object
         # rs.align allows us to perform alignment of depth frames to others frames
         # The "align_to" is the stream type to which we plan to align depth frames.
+        print("Align")
         self.align_to = rs.stream.color
         self.align = rs.align(align_to)
         self.colorizer = rs.colorizer()
 
         # Flags
         self.num_frames_found = 0
+        frames = self.pipeline.wait_for_frames()
+        # frames.get_depth_frame() is a 640x360 depth image
 
+        # Align the depth frame to color frame
+        aligned_frames = self.align.process(frames)
 
+        # Get aligned frames
+        aligned_depth_frame = aligned_frames.get_depth_frame() # aligned_depth_frame is a 640x480 depth image
+        print("Gathering frames")
+        color_frame = aligned_frames.get_color_frame()
+        depth_color_frame = self.colorizer.colorize(aligned_depth_frame)
+       
+        color_frame = aligned_frames.get_color_frame()
+        depth_color_frame = self.colorizer.colorize(aligned_depth_frame)
+
+        color_frame = aligned_frames.get_color_frame()
+        depth_color_frame = self.colorizer.colorize(aligned_depth_frame)
 
     def find_circles(self, frame): #, x, y, radius):    
         # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
