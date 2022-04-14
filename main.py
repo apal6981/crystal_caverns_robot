@@ -131,7 +131,7 @@ def main():
         try:
             if current_state == State.INIT:
                 current_state = State.IR_START
-                set_arm(0)
+                set_arm(30)
 
             elif current_state == State.IR_START:
                 # check if sensor is seeing the start command
