@@ -1,24 +1,40 @@
-from dis import dis
+# from distutils import dist
 import threading, queue, serial
-from regex import R
 import numpy as np
 from gpiozero import Motor
+import RPi.GPIO as GPIO
+
+import time
+
+import camera
 
 # thread safe queues of size one to only allow most recent message to be in it
-odom_q = queue.Queue(1)
+# odom_q = queue.Queue(1)
 sens_q = queue.Queue(1)
+drive_q = queue.Queue(1)
 
 # motor objects
-motor_l = Motor(2, 3)
-motor_r = Motor(9, 10)
+
+# servo objects
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(20, GPIO.OUT)
+GPIO.setup(21, GPIO.OUT)
+servo_l = GPIO.PWM(20, 50)
+servo_r = GPIO.PWM(21, 50)
+servo_l.start(0)
+servo_r.start(0)
+
+real_cam = camera.Camera()
+
 
 # read from the arduino, Send the four sensor values along to the the main thread
 def arduino_read():
-    ser = serial.Serial("/dev/ttyUSB0", baudrate=115200)
-    ser.flushInput()
+    ard = serial.Serial("/dev/ttyUSB0", baudrate=115200)
+    ard.flushInput()
     while True:
-        if ser.in_waiting > 20:
-            sens_values = ser.readline().decode().rstrip().split(" ")
+        # print("waiting for ard bytes",ard.in_waiting)
+        if ard.in_waiting > 20:
+            sens_values = ard.readline().decode().rstrip().split(" ")
             sens_q.put(
                 [
                     int(sens_values[0]),
@@ -27,79 +43,172 @@ def arduino_read():
                     int(sens_values[3]),
                 ]
             )
+        try:
+            drive_command = drive_q.get_nowait()
+            ard.write(str((drive_command[0]).zfill(3)+" "+str(drive_command[1]).zfill(3)).encode('utf-8)'))
+        except queue.Empty:
+            pass
 
 
-# read from the teensy the encoder values, calculate and update pose and pass to main thread
-def teensy_read():
-    # make theta between pi and -pi
-    def minimize_angle(angle):
-        while angle < -np.pi:
-            angle = angle + 2 * np.pi
-        while angle >= np.pi:
-            angle = angle - 2 * np.pi
-        return angle
+from enum import Enum, auto
 
-    # open the serial object to talk to teensy board
-    ser = serial.Serial("/dev/ttyACM0", baudrate=115200)
-    ser.flushInput()
-    while ser.in_waiting < 40:
-        pass
-    # get the init values for wheel odometry
-    prev_l, prev_r = ser.readline().decode().rstrip().split(" ")
-    prev_l = int(prev_l)
-    prev_r = int(prev_r)
-    print(prev_l, prev_r)
 
-    x = 0
-    y = 0
-    theta = 0
-    dt = 0.050
+class State(Enum):
+    INIT = auto()
+    IR_START = auto()
+    DRIVE_TO_CENTER = auto()
+    SPIN_CYCLE = auto()
+    DRIVE_TO_BALL = auto()
+    BACK_UP = auto()
+    IR_FINISH = auto()
+    DRIVE_HOME = auto()
+    FINISH = auto()
 
-    # wheel odometry constants
-    gear_reduction = 784.0 / 81.0
-    wheel_circum = 0.0905 * np.pi
-    wheel_base = 0.200  # TODO get actual value
-    dist_const = wheel_circum / (512 * 4 * gear_reduction)
 
-    while ser.is_open:
-        # only grab from buffer where there is at least one message in it
-        if ser.in_waiting > 40:
-            # do wheel odom stuff
-            left, right = ser.readline().decode().rstrip().split(" ")
-            left = int(left)
-            right = int(right)
-            delta_l = (left - prev_l) * dist_const
-            delta_r = (right - prev_r) * dist_const
-            d_center = (delta_r + delta_l) / 2
-            phi = minimize_angle((delta_r - delta_l) / wheel_base)
-            x += d_center * np.cos(phi)
-            y += d_center * np.sin(phi)
-            theta += phi
-            theta = minimize_angle(theta)
-            print(x, y, theta)
+def calc_theta_error(array1, array2):
+    inner = np.inner(array1, array2)
+    norms = np.linalg.norm(array1) * np.linalg.norm(array2)
 
-            prev_r = right
-            prev_l = left
-            # send pose to queue to be processed
-            odom_q.put([x, y, theta])
+    cos = inner / norms
+    return np.arccos(np.clip(cos, -1.0, 1.0))
+
+
+# Depth is in meters
+def calc_way_point(odom, depth):
+    return [depth * np.cos(odom[2]) + odom[0], depth * np.sin(odom[2]) + odom[1]]
+
+
+def set_arm(angle):
+    duty_l = angle / 18 + 2
+    duty_r = (135 - angle) / 18 + 2
+    GPIO.output(20, True)
+    GPIO.output(21, True)
+    servo_l.ChangeDutyCycle(duty_l)
+    servo_r.ChangeDutyCycle(duty_r)
+    # sleep(1)
+    GPIO.output(20, False)
+    GPIO.output(21, False)
+    servo_l.ChangeDutyCycle(duty_l)
+    servo_r.ChangeDutyCycle(duty_r)
+
+
+SENSOR_START_THRESH = -1
+SENSOR_FINISH_THRESH = 100
 
 
 def main():
     # Start threads for teensy and arduino boards
-    threading.Thread(
-        target=teensy_read,
-    ).start()
+    # threading.Thread(
+    #     target=teensy_read,
+    # ).start()
     threading.Thread(target=arduino_read).start()
+
+    current_state = State.INIT
+    center = False
+    have_ball = False
+    frame_centered = False
+    home = False
+
+    way_point_index = 0
+    ball_depth = 0
 
     # run the state machine
     while True:
+        # state transitions
         try:
-            print(odom_q.get_nowait())
+            if current_state == State.INIT:
+                current_state = State.IR_START
+                set_arm(0)
+
+            elif current_state == State.IR_START:
+                # check if sensor is seeing the start command
+                sensor_values = sens_q.get_nowait()
+                print(sensor_values)
+                if sensor_values[
+                    3] > SENSOR_START_THRESH:  # TODO add actual sensor index value.... Done but set threshold value
+                    current_state = State.DRIVE_TO_CENTER
+                    set_arm(85)
+
+            elif current_state == State.DRIVE_TO_CENTER:
+                # check to see if we made it to the center
+                if center:  # TODO how are we checking if we made it to the center
+                    print("Enter the spin cycle, time to get groovy")
+                    current_state = State.SPIN_CYCLE
+
+            elif current_state == State.SPIN_CYCLE:
+                # check if ball is aligned enough
+                if frame_centered:
+                    print("driving to ball")
+                    current_state = State.DRIVE_TO_BALL
+
+            elif current_state == State.DRIVE_TO_BALL:
+                # check to see if we have the ball
+                if have_ball:
+                    print("beep.....beep.....beep")
+                    set_arm(130)
+                    current_state = State.BACK_UP
+
+            elif current_state == State.BACK_UP:
+                if center:  # TODO how are we checking if we made it to the center
+                    print("go towards the light")
+                    current_state = State.IR_FINISH
+
+            elif current_state == State.IR_FINISH:
+                # Start corner as been identified
+                if sens_q.get_nowait()[0] > SENSOR_FINISH_THRESH:  # TODO add actual sensor index value
+                    print("Found the holy light, now stay on the straight and narrow")
+                    current_state = State.DRIVE_HOME
+
+            elif current_state == State.DRIVE_HOME:
+                if home:  # TODO how are we checking if we made it home
+                    print("you made it home")
+                    current_state == State.FINISH
+
+            elif current_state == State.FINISH:
+                pass
+
+            else:
+                print("you shouldn't be here")
+                raise RuntimeError()
         except queue.Empty:
             pass
+
         try:
-            print(sens_q.get_nowait())
+            # State Actions
+            if current_state == State.INIT:
+                pass
+            elif current_state == State.IR_START:
+                pass
+            elif current_state == State.DRIVE_TO_CENTER:
+                pass
+
+            elif current_state == State.SPIN_CYCLE:
+                pass
+
+            elif current_state == State.DRIVE_TO_BALL:
+                pass
+
+            elif current_state == State.BACK_UP:
+                pass
+
+            elif current_state == State.IR_FINISH:
+                pass
+
+            elif current_state == State.DRIVE_HOME:
+                pass
+
+            elif current_state == State.FINISH:
+                # Free GPIO from servos
+                servo_l.stop()
+                servo_r.stop()
+                GPIO.cleanup()
+
+                pass
+            else:
+                print("you shouldn't be here")
+                raise RuntimeError()
         except queue.Empty:
+            # print("nothing in odom q")
             pass
 
 
