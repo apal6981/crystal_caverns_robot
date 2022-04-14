@@ -96,7 +96,7 @@ class Camera:
 
         circles = cv2.HoughCircles(frame, method=cv2.HOUGH_GRADIENT, dp=1, \
             # minDist=100, param1=200, param2=10, maxRadius=70, minRadius=30)
-            minDist=100, param1=100, param2=10, maxRadius=30, minRadius=15)
+            minDist=100, param1=100, param2=15, maxRadius=50, minRadius=15)
 
         return circles
 
@@ -134,171 +134,55 @@ class Camera:
         depth_image = np.asanyarray(aligned_depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
 
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+        # depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
         # Images gathered, ready to be processed
 
         if self.writer_c is None:
             self.writer_c = cv2.VideoWriter(self.video_name_c, cv2.VideoWriter_fourcc(*'MJPG'), self.fps, (color_image.shape[1], color_image.shape[0]), True)
-            self.writer_d = cv2.VideoWriter(self.video_name_d, cv2.VideoWriter_fourcc(*'MJPG'), self.fps, (depth_colormap.shape[1], depth_colormap.shape[0]), True)
+            self.writer_d = cv2.VideoWriter(self.video_name_d, cv2.VideoWriter_fourcc(*'MJPG'), self.fps, (color_image.shape[1], color_image.shape[0]), True)
 
-        self.writer_c.write(color_image)
-        self.writer_d.write(depth_colormap)
-
-        # Time to resize images
-        height, width, layers = color_image.shape
-        new_h = 240
-        new_w = 480
-        color_image = cv2.resize(color_image, (new_w, new_h))
-        depth_image = cv2.resize(depth_image, (new_w, new_h))
-
-        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
-
-        # Equalize depth image
-        depth_gray = cv2.cvtColor(depth_colormap, cv2.COLOR_BGR2GRAY)
-        depth_gray = cv2.equalizeHist(depth_gray)
-
-        # Erode and Dilate gray depth image
-        erode_kernel = np.ones((21, 21))
-        kernel = np.ones((11, 11), np.uint8)
-        depth_gray = cv2.erode(depth_gray, erode_kernel, iterations=1)
-        depth_gray = cv2.dilate(depth_gray, kernel, iterations=1)
+        # depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
 
         # Erode, dilate, and threshold color image to find white lines/ ball
         gray_color = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
         erode_kernel = np.ones((5, 5))
         kernel = np.ones((5, 5), np.uint8)
-        _, gray_color = cv2.threshold(gray_color, 220, 255, cv2.THRESH_BINARY)
+        _, gray_color = cv2.threshold(gray_color, 50, 255, cv2.THRESH_BINARY)
         gray_color = cv2.erode(gray_color, erode_kernel, iterations=1)
         gray_color = cv2.dilate(gray_color, kernel, iterations=1)
 
-        # Find max values across all columns, then find highest 255 value
-        gray_color_temp = gray_color[50:-17, 100:-100]
-        white_vals = np.amax(gray_color_temp, axis=1)
-        y_idx = (white_vals!=0).argmax()
-        x_idx = (gray_color_temp[y_idx]!=0).argmax()
-        # cv2.circle(color_image, (x_idx, y_idx), 15, (0, 0, 255), -1)
-
-        # draw bounding box/ ROI
-        x_spacing = 60
-        y_spacing = 40
-
-        y_idx += 50
-        x_idx += 100
-        xL = x_idx-x_spacing
-        xR = x_idx+x_spacing
-        yT = y_idx - 4
-        yB = y_idx + y_spacing
-
-        # Check edge cases
-        if xL < 0:
-            xL = 0
-        elif xR > gray_color.shape[1]:
-            xR = gray_color.shape[1]
-        if yT < 0:
-            yT = 0
-        elif yB > gray_color.shape[0]:
-            yB = gray_color.shape[0]
-
-        # cv2.rectangle(color_image, (xL, yT), (xR, yB), (0,0,255), 5)
-        # cv2.rectangle(depth_colormap, (xL, yT), (xR, yB), (0,0,255), 5)
-
-        roi_color = gray_color[yT:yB, xL:xR]
-        roi_depth = depth_gray[yT:yB, xL:xR]
-        roi_edges = cv2.Canny(roi_color, 10, 255)
-
-        # cv2.imshow("roi_depth", roi_depth)
-        # cv2.imshow("roi_color", roi_color)
-        # cv2.imshow("roi_edges", roi_edges)
-
-        # Time to look for circles / try different approaches
-        circles_color = self.find_circles(roi_color)
-        circles_depth = self.find_circles(roi_depth)
-        circles_edges = self.find_circles(roi_edges)
-
-        if circles_color is not None:
-            num_circles += 1
-
-        if circles_edges is not None:
-            num_circles += 1
-
-        if self.display == True:
-            color_image_circle = self.draw_circles(circles_color, color_image, xL, yT)
-            canny_image_circle = self.draw_circles(circles_edges, color_image, xL, yT)
-
-        # Color Contours
-        ###############################################
-        # Get the contour and check its area
-        contours = cv2.findContours(roi_color, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
-        max_area_c = 0
-        top_cnt = []
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area > max_area_c:
-                max_area_c = area
-                top_cnt = cnt
-        # find the centroid of the contour
-        # if top_cnt != []:
-            # print("Max area:", max_area)
-        color_image_contour = color_image
-
-        if max_area_c > 700 and max_area_c < 1000:
-            num_circles += 1
-            M = cv2.moments(top_cnt)
-
-            new_size = np.sqrt(max_area_c / np.pi)
-
-            # draw the circle and bounding box
-            if self.display == True:
-                color_image_contour = cv2.circle(color_image,
-                                (xL+int(M['m10'] / M['m00']), yT+int(M['m01'] / M['m00'])), int(new_size), (0, 255, 0), -1)
-        ###############################################
-
-        # Depth Contours
-        ###############################################
-        # Get the contour and check its area
-        contours = cv2.findContours(roi_depth, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
-        max_area_d = 0
-        top_cnt = []
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area > max_area_d:
-                max_area_d = area
-                top_cnt = cnt
-        # find the centroid of the contour
-        # if top_cnt != []:
-        #     print("Max area:", max_area)
-        if max_area_d > 600 and max_area_d < 1000:
-            stop_flag = True
-            # num_circles += 1
-            M = cv2.moments(top_cnt)
-
-            new_size = np.sqrt(max_area_d / np.pi)
-
-            if self.display == True:
-                depth_colormap = cv2.circle(depth_colormap,
-                                (xL+int(M['m10'] / M['m00']), yT+int(M['m01'] / M['m00'])), int(new_size), (0, 255, 0), -1)
-
+        circles_color = self.find_circles(gray_color)
+        circle_image = self.draw_circles(circles_color, color_image, 0, 0)
+        self.writer_c.write(gray_color)
+        self.writer_d.write(circle_image)
+        
         ##### Template
-        w, h = self.template.shape[::-1]
-        method = cv2.TM_CCOEFF
-        res = cv2.matchTemplate(gray_color,self.template,method)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-        top_left = max_loc
-        if top_left[0] < 20 and self.prev_lx > 240:
-            self.current_corner -= 1
-            if self.current_corner == -1:
-                self.current_corner = 7
-            print("viewing corner #", self.current_corner)
-        self.prev_lx = top_left[0]
-        if self.display == True:
-            bottom_right = (top_left[0] + w, top_left[1] + h)
-            cv2.rectangle(gray_color,top_left, bottom_right, 255, 2)
-            cv2.imshow("template", gray_color)
+        # w, h = self.template.shape[::-1]
+        # method = cv2.TM_CCOEFF
+        # res = cv2.matchTemplate(gray_color,self.template,method)
+        # min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+        # top_left = max_loc
+        # if top_left[0] < 20 and self.prev_lx > 240:
+        #     self.current_corner -= 1
+        #     if self.current_corner == -1:
+        #         self.current_corner = 7
+        #     print("viewing corner #", self.current_corner)
+        # self.prev_lx = top_left[0]
+        # if self.display == True:
+        #     bottom_right = (top_left[0] + w, top_left[1] + h)
+        #     cv2.rectangle(gray_color,top_left, bottom_right, 255, 2)
+        #     cv2.imshow("template", gray_color)
 
         dist_array = []
         total_dist = 0
+        if circles_color is not None:
+            x_mid = circles_color[0][0][0]
+            y_mid = circles_color[0][0][1]
+        else:
+            x_mid = 320
+            y_mid = 240
         for i in range(3):
-            dist = aligned_depth_frame.get_distance(int(((xR-xL)/2+xL)*1.33), int((yB-i*3)*1.5))
+            dist = aligned_depth_frame.get_distance(int(x_mid), int((y_mid-i*3)))
             if dist < 0.05:
                 continue
             dist_array.append(dist)
@@ -309,36 +193,17 @@ class Camera:
         else:
             total_dist = np.average(np.array(dist_array))
         print("Frame num", self.frame_num)
-        if self.frame_num <= 3:
+        if self.frame_num <= 8:
             total_dist = 5
-        if num_circles >= 1 and stop_flag == True:
+        
+        if circles_color is not None:
             self.num_frames_found += 1
             if self.num_frames_found >= 1:   # Num frams ball must be found before detection is raised
-                return True, ((xR-xL)/2+xL)/480, total_dist  # Raise flag
-            return False, ((xR-xL)/2+xL)/480, total_dist
+                return True, (x_mid/480), total_dist  # Raise flag
+            return False, x_mid/480, total_dist
         else:
             self.num_frames_found = 0
-            return False, ((xR-xL)/2+xL)/480, total_dist
-
-        if self.display == True:
-            # cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
-            # cv2.imshow('Hough Circle Color', color_image_circle)
-
-            # cv2.namedWindow('canny_image_circle', cv2.WINDOW_NORMAL)
-            # cv2.imshow('canny_image_circle', canny_image_circle)
-
-            # cv2.namedWindow('Color Contour', cv2.WINDOW_NORMAL)
-            # cv2.imshow('Color Contour', color_image_contour)
-
-            # cv2.namedWindow('Depth', cv2.WINDOW_NORMAL)
-            # cv2.imshow('Depth', depth_colormap) #depth_gray)
-
-            # cv2.namedWindow('Depth_hist', cv2.WINDOW_NORMAL)
-            # cv2.imshow('Depth_hist', depth_gray)
-
-            cv2.namedWindow('white', cv2.WINDOW_NORMAL)
-            cv2.imshow('white', gray_color)
-            cv2.waitKey(1)
+            return False, x_mid/480, total_dist
         
     def find_corner(self):
     # Streaming loop

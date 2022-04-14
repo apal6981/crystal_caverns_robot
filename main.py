@@ -6,7 +6,7 @@ import RPi.GPIO as GPIO
 
 import time
 
-import camera
+import camera_hough as camera
 
 # thread safe queues of size one to only allow most recent message to be in it
 # odom_q = queue.Queue(1)
@@ -26,33 +26,21 @@ servo_r.start(0)
 
 real_cam = camera.Camera()
 
+L_STOP = 1508
+R_STOP = 1498
 
 # read from the arduino, Send the four sensor values along to the the main thread
 def arduino_read():
-    ard = serial.Serial("/dev/ttyUSB0", baudrate=115200)
+    ard = serial.Serial("/dev/ttyUSB0", baudrate=9600)
     ard.flushInput()
     while True:
         # print("waiting for ard bytes",ard.in_waiting)
-        if ard.in_waiting > 20:
-            sens_values = ard.readline().decode().rstrip().split(" ")
-            sens_q.put(
-                [
-                    int(sens_values[0]),
-                    int(sens_values[1]),
-                    int(sens_values[2]),
-                    int(sens_values[3]),
-                ]
-            )
+        # ipython)
         try:
             drive_command = drive_q.get_nowait()
             ard.write(
-                str(
-                    (drive_command[0]).zfill(4)
-                    + " "
-                    + str(drive_command[1]).zfill(4)
-                    + " "
-                ).encode("utf-8)")
-            )
+                (str(drive_command[0]).zfill(4)+ " "+ str(drive_command[1]).zfill(4)+ " ").encode("utf-8"))
+            
         except queue.Empty:
             pass
 
@@ -98,6 +86,14 @@ def set_arm(angle):
     servo_l.ChangeDutyCycle(duty_l)
     servo_r.ChangeDutyCycle(duty_r)
 
+def calc_orientation(val):
+    l_baseline = 1508
+    r_baseline = 1498
+    l_scale = -100
+    r_scale = -100
+
+    return int((l_baseline + (val * l_scale))), int((r_baseline + (1 - val) * r_scale))
+
 
 SENSOR_START_THRESH = -1
 SENSOR_FINISH_THRESH = 100
@@ -118,6 +114,7 @@ def main():
 
     way_point_index = 0
     ball_depth = 0
+    d_goal = 1.0
 
     # run the state machine
     while True:
@@ -125,17 +122,20 @@ def main():
         try:
             if current_state == State.INIT:
                 current_state = State.IR_START
-                set_arm(0)
+                drive_q.put([1508,1498])
+                set_arm(30)
 
             elif current_state == State.IR_START:
                 # check if sensor is seeing the start command
-                sensor_values = sens_q.get_nowait()
-                print(sensor_values)
-                if (
-                    sensor_values[3] > SENSOR_START_THRESH
-                ):  # TODO add actual sensor index value.... Done but set threshold value
-                    current_state = State.DRIVE_TO_CENTER
-                    set_arm(85)
+                # sensor_values = sens_q.get_nowait()
+                # print(sensor_values)
+                # if (
+                #     sensor_values[3] > SENSOR_START_THRESH
+                # ):  # TODO add actual sensor index value.... Done but set threshold value
+                #     current_state = State.DRIVE_TO_CENTER
+                #     set_arm(85)
+                current_state = State.DRIVE_TO_CENTER
+                print("we are going driving")
 
             elif current_state == State.DRIVE_TO_CENTER:
                 # check to see if we made it to the center
@@ -160,6 +160,7 @@ def main():
                 if center:  # TODO how are we checking if we made it to the center
                     print("go towards the light")
                     current_state = State.IR_FINISH
+                    drive_q.put([1518,1485])
 
             elif current_state == State.IR_FINISH:
                 # Start corner as been identified
@@ -168,6 +169,7 @@ def main():
                 ):  # TODO add actual sensor index value
                     print("Found the holy light, now stay on the straight and narrow")
                     current_state = State.DRIVE_HOME
+                    drive_q.put([1350,1350])
 
             elif current_state == State.DRIVE_HOME:
                 if home:  # TODO how are we checking if we made it home
@@ -190,26 +192,64 @@ def main():
             elif current_state == State.IR_START:
                 pass
             elif current_state == State.DRIVE_TO_CENTER:
-                drive_q.put[180, 180]
+                # drive_q.put[180, 180]
+                ball_found, val, dist = real_cam.find_ball()
+                print("val:", val, "dist:",dist)
+                if dist <= d_goal:
+                    center = True
+                    continue
+
+                # l_val, r_val = calc_orientation(val)
+                drive_q.put([1300, 1300])
+                
                 pass
 
             elif current_state == State.SPIN_CYCLE:
+                ball_found, val, dist = real_cam.find_ball()
+                if ball_found:
+                    print("ball found, val:",val)
+                    print("stopping")
+                    # if .35 < val < .65:
+                    #     print("ball centered")
+                    drive_q.put([1508,1498])
+                    frame_centered = True
+                    continue
+                    
+
+                drive_q.put([1518,1485])
                 pass
 
             elif current_state == State.DRIVE_TO_BALL:
+                depth = real_cam.drive_to_ball()
+                if depth < .5:
+                    print("got the ball")
+                    have_ball = True
+                    
+                drive_q.put([1480,1470])
                 pass
 
             elif current_state == State.BACK_UP:
+
+                drive_q.put([1600,1600])
+                time.sleep(2)
+                drive_q.put([1508,1498])
+                print("back uped")
                 pass
 
             elif current_state == State.IR_FINISH:
+                # we are just spinning here
                 pass
 
             elif current_state == State.DRIVE_HOME:
+                time.sleep(2)
+                # we should be home
+                drive_q.put([1508,1498])
+                home = True
                 pass
 
             elif current_state == State.FINISH:
                 # Free GPIO from servos
+                drive_q.put([1508,1498])
                 servo_l.stop()
                 servo_r.stop()
                 GPIO.cleanup()
