@@ -278,11 +278,11 @@ class Camera:
         if num_circles >= 1 and stop_flag == True:
             self.num_frames_found += 1
             if self.num_frames_found >= 1:   # Num frams ball must be found before detection is raised
-                return True, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB)) # Raise flag
-            return False, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB))
+                return True, ((xR-xL)/2+xL)/480, aligned_depth_frame.get_distance(int(int(((xR-xL)/2+xL)*1.33), int(yB*1.5))) # Raise flag
+            return False, ((xR-xL)/2+xL)/480, aligned_depth_frame.get_distance(int(((xR-xL)/2+xL)*1.33), int(yB*1.5))
         else:
             self.num_frames_found = 0
-            return False, ((xR-xL)/2+xL)/480, depth_frame.get_distance(int((xR-xL)/2), int(yB))
+            return False, ((xR-xL)/2+xL)/480, aligned_depth_frame.get_distance(int(((xR-xL)/2+xL)*1.33), int(yB*1.5))
 
         if self.display == True:
             cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
@@ -305,9 +305,6 @@ class Camera:
             cv2.imshow('white', gray_color)
             cv2.waitKey(1)
         
-    def stop_pipeline(self):
-        pipeline.stop()
-
     def find_corner(self):
     # Streaming loop
         ball_x_loc = 0
@@ -386,7 +383,7 @@ class Camera:
 
         center = (top_right[0] - top_left[0])/2 + top_left[0]
 
-        return True, center, depth_frame.get_distance(int(center), int(top_left[1]-15)) # Raise flag
+        return True, center, aligned_depth_frame.get_distance(int(center*1.33), int(top_left[1]-15)*1.5) # Raise flag
 
         if self.display == True:
             cv2.namedWindow('Depth', cv2.WINDOW_NORMAL)
@@ -395,6 +392,11 @@ class Camera:
             cv2.namedWindow('white', cv2.WINDOW_NORMAL)
             cv2.imshow('white', gray_color)
             cv2.waitKey(1)
-        
+
+    def drive_to_bal(self):
+        return aligned_depth_frame.get_distance(int(center), int(top_left[1]-15))
+
     def stop_pipeline(self):
         pipeline.stop()
+
+    
