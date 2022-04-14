@@ -143,7 +143,7 @@ def set_arm(angle):
     servo_l.ChangeDutyCycle(duty_l)
     servo_r.ChangeDutyCycle(duty_r)
 
-SENSOR_START_THRESH = 10
+SENSOR_START_THRESH = -1
 SENSOR_FINISH_THRESH = 100
 CENTER_GOAL = [.70,0]
 BALL_GOAL = [1.2, 0]
@@ -154,6 +154,8 @@ KP_d = .7
 KD_d = 0
 KP_t = .3
 KD_t = .05
+
+KP_s = .2
 
 
 def main():
@@ -169,7 +171,10 @@ def main():
     frame_centered = False
     home = False
 
+    way_point_index = 0
+
     odom = [0,0,0,0,0]
+    WAY_POINTS =[2,-3,-1,1,3,-2]
 
     # run the state machine
     while True:
@@ -258,8 +263,24 @@ def main():
                 motor_r.forward(motor_command+theta_adjust)
 
             elif current_state == State.SPIN_CYCLE:
-                motor_l.backward(.17)
-                motor_r.forward(.17)
+                odom = odom_q.get_nowait()
+            # goal = abs(WAY_POINTS[way_point_index])
+            # start = abs(odom[2])
+
+            # theta_err = min(2*np.pi-start+goal, goal+start)
+                theta_err = (WAY_POINTS[way_point_index] % 4 + abs(odom[2] % -4) if WAY_POINTS[way_point_index] < 0 and odom[2] >= 0 else WAY_POINTS[way_point_index]-odom[2])*np.pi/4
+
+                if theta_err < .1:
+                    way_point_index += 1
+                    print("waypoint",way_point_index,"was hit")
+                    if way_point_index > 5:
+                        print("done")
+                        exit(0)
+                    continue
+                motor_command = max(min(KP_s*theta_err, .2),.15)
+                print("err:",theta_err,"speed:", motor_command,"orient:",odom[2],"waypoint:",WAY_POINTS[way_point_index])
+                motor_l.value = -motor_command
+                motor_r.value = motor_command
                 
                 pass
             elif current_state == State.DRIVE_TO_BALL:

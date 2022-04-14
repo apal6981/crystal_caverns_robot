@@ -89,11 +89,11 @@ def main():
             # theta_err = min(2*np.pi-start+goal, goal+start)
             theta_err = (WAY_POINTS[way_point_index] % 4 + abs(odom[2] % -4) if WAY_POINTS[way_point_index] < 0 and odom[2] >= 0 else WAY_POINTS[way_point_index]-odom[2])*np.pi/4
 
-            if theta_err < .3:
+            if theta_err < .1:
                 way_point_index += 1
                 print("waypoint",way_point_index,"was hit")
                 continue
-            motor_command = max(min(KP*theta_err, .4),.17)
+            motor_command = max(min(KP*theta_err, .2),.15)
             print("err:",theta_err,"speed:", motor_command,"orient:",odom[2],"waypoint:",WAY_POINTS[way_point_index])
             motor_l.value = -motor_command
             motor_r.value = motor_command
@@ -114,5 +114,6 @@ def main():
             # motor_r.forward(motor_command+theta_adjust)
         except queue.Empty:
             pass
-
+    motor_l.stop()
+    motor_r.stop()
 main()
