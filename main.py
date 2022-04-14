@@ -96,10 +96,10 @@ def set_arm(angle):
     servo_r.ChangeDutyCycle(duty_r)
 
 def calc_orientation(val):
-    l_baseline = 0
-    r_baseline = 0
-    l_scale = 0
-    r_scale = 0
+    l_baseline = 1508
+    r_baseline = 1498
+    l_scale = -100
+    r_scale = -100
 
     return int((l_baseline + (val * l_scale))), int((r_baseline + (1 - val) * r_scale))
 
@@ -205,26 +205,32 @@ def main():
                     center = True
                     continue
 
-                l_val, r_val = calc_orientation(val)
-                drive_q.put([l_val, r_val])
+                # l_val, r_val = calc_orientation(val)
+                drive_q.put([1300, 1300])
                 
                 pass
 
             elif current_state == State.SPIN_CYCLE:
                 ball_found, val, dist = real_cam.find_ball()
                 if ball_found:
-                    print("ball found")
-                    if .6 < val < .7:
-                        print("ball centered")
-                        drive_q.put([1508,1498])
-                        frame_centered = True
-                        continue
+                    print("ball found, val:",val)
+                    print("stopping")
+                    # if .35 < val < .65:
+                    #     print("ball centered")
+                    drive_q.put([1508,1498])
+                    frame_centered = True
+                    continue
                     
 
-                drive_q.put([1550,1450])
+                drive_q.put([1520,1485])
                 pass
 
             elif current_state == State.DRIVE_TO_BALL:
+                depth = real_cam.drive_to_ball()
+                if depth < .02:
+                    have_ball = True
+                    
+                drive_q.put([1480,1470])
                 pass
 
             elif current_state == State.BACK_UP:

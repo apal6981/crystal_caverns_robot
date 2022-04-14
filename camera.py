@@ -16,7 +16,15 @@ import cv2
 
 class Camera:
     def __init__(self, display=False):
-        self.display = display
+        self.display = True #display
+        self.record = False
+
+        vid_name = "realsense_record"
+        self.video_name_c = str(vid_name + "_color.avi")
+        self.video_name_d = str(vid_name + "_depth.avi")
+        self.fps = 3
+        self.writer_c = None
+        self.writer_d = None
             # Create a pipeline
         print("start pipeline")
         self.pipeline = rs.pipeline()
@@ -27,6 +35,7 @@ class Camera:
         #  different resolutions of color and depth streams
         print("config")
         self.config = rs.config()
+        self.frame_num = 0
 
         # Get device product line for setting a supporting resolution
         pipeline_wrapper = rs.pipeline_wrapper(self.pipeline)
@@ -102,6 +111,7 @@ class Camera:
 
     def find_ball(self):
     # Streaming loop
+        self.frame_num += 1
         ball_x_loc = 0
         stop_flag = False
         num_circles = 0
@@ -124,6 +134,13 @@ class Camera:
 
         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
         # Images gathered, ready to be processed
+
+        if self.writer_c is None:
+            self.writer_c = cv2.VideoWriter(self.video_name_c, cv2.VideoWriter_fourcc(*'MJPG'), fps, (color_image.shape[1], color_image.shape[0]), True)
+            self.writer_d = cv2.VideoWriter(self.video_name_d, cv2.VideoWriter_fourcc(*'MJPG'), fps, (depth_colormap.shape[1], depth_colormap.shape[0]), True)
+
+        self.writer_c.write(color_image)
+        self.writer_d.write(depth_colormap)
 
         # Time to resize images
         height, width, layers = color_image.shape
@@ -289,8 +306,9 @@ class Camera:
             print("Dist array is 0!")
         else:
             total_dist = np.average(np.array(dist_array))
-
-
+        print("Frame num", self.frame_num)
+        if self.frame_num <= 3:
+            total_dist = 1
         if num_circles >= 1 and stop_flag == True:
             self.num_frames_found += 1
             if self.num_frames_found >= 1:   # Num frams ball must be found before detection is raised
@@ -301,18 +319,17 @@ class Camera:
             return False, ((xR-xL)/2+xL)/480, total_dist
 
         if self.display == True:
-            cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
-            cv2.imshow('Hough Circle Color', color_image_circle)
+            # cv2.namedWindow('Hough Circle Color', cv2.WINDOW_NORMAL)
+            # cv2.imshow('Hough Circle Color', color_image_circle)
 
-            cv2.namedWindow('canny_image_circle', cv2.WINDOW_NORMAL)
-            cv2.imshow('canny_image_circle', canny_image_circle)
-            canny_image_circle
+            # cv2.namedWindow('canny_image_circle', cv2.WINDOW_NORMAL)
+            # cv2.imshow('canny_image_circle', canny_image_circle)
 
-            cv2.namedWindow('Color Contour', cv2.WINDOW_NORMAL)
-            cv2.imshow('Color Contour', color_image_contour)
+            # cv2.namedWindow('Color Contour', cv2.WINDOW_NORMAL)
+            # cv2.imshow('Color Contour', color_image_contour)
 
-            cv2.namedWindow('Depth', cv2.WINDOW_NORMAL)
-            cv2.imshow('Depth', depth_colormap) #depth_gray)
+            # cv2.namedWindow('Depth', cv2.WINDOW_NORMAL)
+            # cv2.imshow('Depth', depth_colormap) #depth_gray)
 
             # cv2.namedWindow('Depth_hist', cv2.WINDOW_NORMAL)
             # cv2.imshow('Depth_hist', depth_gray)
@@ -422,13 +439,13 @@ class Camera:
         dist_array = []
         total_dist = 0
         for i in range(3):
-            dist = aligned_depth_frame.get_distance(int(center), int(top_left[1]-(i*4)))
+            dist = aligned_depth_frame.get_distance(int(320), int(150-(i*4)))
             if dist < 0.05:
                 continue
             dist_array.append(dist)
         
         if dist_array == []:
-            total_dist = 1
+            total_dist = 0.4
             print("Dist array is 0!")
         else:
             total_dist = np.average(np.array(dist_array))
