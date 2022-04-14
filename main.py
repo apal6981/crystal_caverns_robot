@@ -98,6 +98,14 @@ def set_arm(angle):
     servo_l.ChangeDutyCycle(duty_l)
     servo_r.ChangeDutyCycle(duty_r)
 
+def calc_orientation(val):
+    l_baseline = 0
+    r_baseline = 0
+    l_scale = 0
+    r_scale = 0
+
+    return (l_baseline + (val * l_scale)), (r_baseline + (1 - val) * r_scale)
+
 
 SENSOR_START_THRESH = -1
 SENSOR_FINISH_THRESH = 100
@@ -190,7 +198,15 @@ def main():
             elif current_state == State.IR_START:
                 pass
             elif current_state == State.DRIVE_TO_CENTER:
-                drive_q.put[180, 180]
+                # drive_q.put[180, 180]
+                dist, val = find_middle()
+
+                if dist <= d_goal:
+                    break
+
+                l_val, r_val = calc_orientation(val)
+                drive_q.put([l_val, r_val])
+                
                 pass
 
             elif current_state == State.SPIN_CYCLE:
