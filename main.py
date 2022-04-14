@@ -5,6 +5,8 @@ from gpiozero import Motor
 import RPi.GPIO as GPIO
 
 import time
+
+import camera
 # thread safe queues of size one to only allow most recent message to be in it
 odom_q = queue.Queue(1)
 sens_q = queue.Queue(1)
@@ -21,6 +23,8 @@ servo_l=GPIO.PWM(20, 50)
 servo_r=GPIO.PWM(21, 50)
 servo_l.start(0)
 servo_r.start(0)
+
+real_cam = camera.Camera()
 
 
 # read from the arduino, Send the four sensor values along to the the main thread
@@ -172,6 +176,7 @@ def main():
     home = False
 
     way_point_index = 0
+    ball_depth = 0
 
     odom = [0,0,0,0,0]
     WAY_POINTS =[2,-3,-1,1,3,-2]
@@ -205,7 +210,7 @@ def main():
                     motor_r.stop()
                     print("driving to ball")
                     current_state = State.DRIVE_TO_BALL
-                    BALL_GOAL = calc_way_point(odom, depth)
+                    BALL_GOAL = calc_way_point(odom, ball_depth/1000)
 
             elif current_state == State.DRIVE_TO_BALL:
                 # check to see if we have the ball
@@ -263,6 +268,13 @@ def main():
                 motor_r.forward(motor_command+theta_adjust)
 
             elif current_state == State.SPIN_CYCLE:
+                ball_found, x, ball_depth = real_cam.find_ball()
+                print("ball found?", ball_found, "ball x:", x, "ball depth:", ball_depth)
+                if ball_found and 200 < x < 280:
+                    motor_l.stop()
+                    motor_r.stop()
+                    frame_centered = True:
+                    continue
                 odom = odom_q.get_nowait()
             # goal = abs(WAY_POINTS[way_point_index])
             # start = abs(odom[2])
@@ -274,7 +286,9 @@ def main():
                     way_point_index += 1
                     print("waypoint",way_point_index,"was hit")
                     if way_point_index > 5:
-                        print("done")
+                        print("didn't find the ball")
+                        motor_l.stop()
+                        motor_r.stop()
                         exit(0)
                     continue
                 motor_command = max(min(KP_s*theta_err, .2),.15)
