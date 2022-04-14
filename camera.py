@@ -53,7 +53,7 @@ class Camera:
         # rs.align allows us to perform alignment of depth frames to others frames
         # The "align_to" is the stream type to which we plan to align depth frames.
         print("Align")
-        self.align_to = rs.stream.color
+        align_to = rs.stream.color
         self.align = rs.align(align_to)
         self.colorizer = rs.colorizer()
 
@@ -189,9 +189,9 @@ class Camera:
         # cv2.imshow("roi_edges", roi_edges)
 
         # Time to look for circles / try different approaches
-        circles_color = find_circles(roi_color)
-        circles_depth = find_circles(roi_depth)
-        circles_edges = find_circles(roi_edges)
+        circles_color = self.find_circles(roi_color)
+        circles_depth = self.find_circles(roi_depth)
+        circles_edges = self.find_circles(roi_edges)
 
         if circles_color is not None:
             num_circles += 1
@@ -200,8 +200,8 @@ class Camera:
             num_circles += 1
 
         if self.display == True:
-            color_image_circle = draw_circles(circles_color, color_image, xL, yT)
-            canny_image_circle = draw_circles(circles_edges, color_image, xL, yT)
+            color_image_circle = self.draw_circles(circles_color, color_image, xL, yT)
+            canny_image_circle = self.draw_circles(circles_edges, color_image, xL, yT)
 
         # Color Contours
         ###############################################
@@ -252,7 +252,7 @@ class Camera:
 
             new_size = np.sqrt(max_area_d / np.pi)
 
-            if display == True:
+            if self.display == True:
                 depth_colormap = cv2.circle(depth_colormap,
                                 (xL+int(M['m10'] / M['m00']), yT+int(M['m01'] / M['m00'])), int(new_size), (0, 255, 0), -1)
 
@@ -261,6 +261,7 @@ class Camera:
             self.num_frames_found += 1
             if self.num_frames_found >= 2:   # Num frams ball must be found before detection is raised
                 return True, (xR-xL)/2, depth_frame.get_distance(int((xR-xL)/2), int(yB)) # Raise flag
+            return False, 0 ,0
         else:
             self.num_frames_found = 0
             return False, 0, 0
